@@ -221,3 +221,7 @@ After initial cleaning of the data, preliminary analysis like n-grams frequencie
 * efficiently store the model so that prediction takes as little time as possible
 * implement backoff models to estimate the probability of unobserved n-grams
 * create a shiny app to apply the predictive model to interactive use
+
+##Source Code
+Rmarkdown file for this report can be found at: https://github.com/xingliuUT/milestoneReport
+
