@@ -1,0 +1,223 @@
+---
+title: "Text Data Cleaning and N-Grams Analysis"
+author: "Xing Liu"
+date: "5/13/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+require(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+opts_knit$set(root.dir = "~/Documents/Documents/x/ddp/capstone/final/en_US")
+
+```
+
+## Synopsis
+This is a milestone report for Coursera Data Science Capstone Project. The goal of the Capstone Project is to build predictive text models that predict the next word based on the previously entered words. This report summarizes the natural language processing and text mining tools used in R to clean, tokenize, and conduct exploratory analysis on the large text data sets. Text data used in this project includes English texts from news, blogs and twitter which are offered by the company SwiftKey in the format of HC Corpora. Plans of how to build the text model will also be discussed.
+
+## Basic Text Data Summaries
+
+I start by looking at the basic summaries of the three English text files: "en_US.news.txt", "en_US.blogs.txt", and "en_US.twitter.txt". The file size, number of chunks and number of words are listed in the table below. The number of chunks counts the number of lines in the text file which sometimes consist of more than one sentence. The word count is found by blindly splitting the text data by spaces which could be an over-estimate. More careful treatment of words will follow in the next sections.
+
+```{r basic, eval = TRUE, message = FALSE, cache = TRUE}
+library(stringi)
+library(tm)
+library(qdap)
+library(ggplot2)
+library(slam)
+library(gridExtra)
+fileSummary <- function(fileName) {
+    sizeMB <- file.size(fileName)/1E06
+    fileCon <- file(fileName, open = "r")
+    fullContents <- readLines(
+        fileCon, encoding = "UTF-8", 
+        skipNul = TRUE)
+    numChunksM <- length(fullContents)/1E06
+    wordsCountM <- sum(stri_count_regex(fullContents,"\\s+"))/1E06
+    resultList <- list("sizeMB" = sizeMB, 
+        "numChunksM" = numChunksM, "wordsCountM" = wordsCountM)
+    close(fileCon)
+    return (resultList)
+}
+#files <- c("sample_en_US.news.txt", "sample_en_US.blogs.txt", "sample_en_US.twitter.txt")
+files <- c("en_US.news.txt", "en_US.blogs.txt", "en_US.twitter.txt")
+result <- sapply(files, fileSummary)
+colnames(result) <- c("News", "Blogs", "Twitter")
+rownames(result) <- c("File Size (MB)", "Chunks (millions)", "Words (millions)")
+basicDF <- as.data.frame(result)
+kable(basicDF)
+```
+
+## N-Grams Frequency Analysis
+
+### Data Sampling
+
+Due to the large volume of the text data, 1% of text from each file is sampled to speed up the exploratory data analysis process. The sampled contents are written out to new files with prefix "sample_".
+```{r sample, eval = TRUE, cache = TRUE}
+set.seed(171)
+sampleFile <- function(fileName, SAMPLE_PERCENTAGE) {
+    fileCon <- file(fileName, open = "r")
+    fullContents <- readLines(
+        fileCon, encoding = "UTF-8", 
+        skipNul = TRUE)
+    fileSample <- fullContents[
+        sample(length(fullContents),
+        SAMPLE_PERCENTAGE*length(fullContents))]
+    sampleFileName <- paste0("sample_",fileName)
+    write(fileSample, file = sampleFileName, 
+        ncolumns = 1, append = FALSE, sep = "\t")
+    close(fileCon)
+    return(sampleFileName)
+}
+SAMPLE_PERCENTAGE <- 0.01
+samples <- sapply(files, sampleFile, SAMPLE_PERCENTAGE)
+```
+
+### Tokenization
+#### Split into Sentences
+The chunks of text are split into sentences using function 'sent_detect' from the qdap library. This is to prevent future n-grams analysis to create words combinations that doesn't naturally exist.
+```{r split into sentence, eval = TRUE, cache = TRUE}
+textData <- sapply(samples, read.table, sep = "\t", quote = "")
+textDataNames <- c("news","blogs","twitter")
+textData <- setNames(textData, textDataNames)
+textData <- sapply(textData, as.character)
+newsData <- unname(unlist(sapply(textData$news, sent_detect)))
+blogsData <- unname(unlist(sapply(textData$blogs, sent_detect)))
+twitterData <- unname(unlist(sapply(textData$twitter, sent_detect)))
+```
+#### Remove Profanity Words
+A list of profanity words is used to remove sentences containing any one of the words from our data set. I found the list from https://gist.github.com/tjrobinson/2366772. After profanity words are removed, create Corpus objects defined by tm package which will be used in manipulations of the text in the following procedures.
+```{r remove profanity words, eval = TRUE, cache = TRUE}
+profanityWordsDF <- read.csv(
+        "../../milestone/profanity.csv",sep="\n")
+colnames(profanityWordsDF) <- "words"
+profanityWordsVector <- as.vector(profanityWordsDF$words)
+profanityWords <- paste(profanityWordsVector,collapse = "|")
+filterProfanityWords <- function(sentences) {
+    return(sentences[!grepl(profanityWords,sentences)])
+}
+goodNewsData <- filterProfanityWords(newsData)
+goodBlogsData <- filterProfanityWords(blogsData)
+goodTwitterData <- filterProfanityWords(twitterData)
+textData <- c(goodNewsData, goodBlogsData, goodTwitterData)
+newsCorpus <- Corpus(VectorSource(goodNewsData))
+blogsCorpus <- Corpus(VectorSource(goodBlogsData))
+twitterCorpus <- Corpus(VectorSource(goodTwitterData))
+textCorpus <- Corpus(VectorSource(textData))
+```
+#### Cleaning
+The data is further cleaned by removing numbers, removing 'RT'(meaning re-tweet) in tweets, remove any left-over punctuation markers and removing extra spaces. The most common terms, known as stop words, are also removed because we are looking for features in the data. Stop words are going to be included in developing predictive models.
+```{r cleaning, eval = TRUE, cache = TRUE}
+removeRT <- function(textCorpus) {
+  return(gsub("RT","", textCorpus))
+}
+cleanCorpus <- function(myCorpus) {
+    myCorpus <- tm_map(myCorpus, removeNumbers)
+    myCorpus <- tm_map(myCorpus, removeRT)
+    myCorpus <- tm_map(myCorpus, removeWords,stopwords("en"))
+    myCorpus <- tm_map(myCorpus, removePunctuation)
+    myCorpus <- tm_map(myCorpus, stripWhitespace)
+    myCorpus <- tm_map(myCorpus, tolower)
+    return(myCorpus)
+}
+newsCorpus <- cleanCorpus(newsCorpus)
+blogsCorpus <- cleanCorpus(blogsCorpus)
+twitterCorpus <- cleanCorpus(twitterCorpus)
+textCorpus <- cleanCorpus(textCorpus)
+```
+### Unigram (Word) Frequencies
+Term-document matrix is used to find out the word, also called unigram, frequency in the data. Using the TermDocumentMatrix function, a matrix that records the number of times a specific term appears in each document is created. Due to the format of my input, the TermDocumentMatrix function treats each sentence as a document, therefore the sum of frequencies in all the sentences is the word count in one file.
+```{r word count, eval = TRUE, cache = TRUE}
+unigram <- function(thisCorpus) {
+    thisTDM2D <- TermDocumentMatrix(thisCorpus)
+    thisTDM1D <- rollup(thisTDM2D, 2, na.rm = TRUE, FUN = sum)
+    thisUniGramDF <- data.frame(words = thisTDM1D$dimnames$Terms, freq = thisTDM1D$v)
+    thisUniGramDFOrdered <- thisUniGramDF[order(-thisUniGramDF$freq),]
+    thisUniGramDFOrdered$words <- reorder(thisUniGramDFOrdered$words, thisUniGramDFOrdered$freq)
+    thisUniGramDFOrdered$percentage <- (thisUniGramDFOrdered$freq / sum(thisUniGramDFOrdered$freq))
+    thisUniGramDFOrdered$cumsum <- cumsum(thisUniGramDFOrdered$freq)
+    thisUniGramDFOrdered$cumpercentage <- cumsum(thisUniGramDFOrdered$percentage)
+    return(thisUniGramDFOrdered)
+}
+newsUniGramDF <- unigram(newsCorpus)
+blogsUniGramDF <- unigram(blogsCorpus)
+twitterUniGramDF <- unigram(twitterCorpus)
+textUniGramDF <- unigram(textCorpus)
+#50% coverage need words:
+Coverage50 <- nrow(textUniGramDF[which(textUniGramDF$cumpercentage <= 0.5),])
+#90% coverage need words:
+Coverage90 <- nrow(textUniGramDF[which(textUniGramDF$cumpercentage <= 0.9),])
+#99% coverage need words:
+Coverage99 <- nrow(textUniGramDF[which(textUniGramDF$cumpercentage <= 0.99),])
+```
+```{r plot percentage, eval = TRUE, cache = TRUE}
+p1 <- plot(textUniGramDF$cumpercentage, ylab = "Coverage", xlab = "Word List", main = "Cumulative Word Frequency") + abline(h = 0.5) + abline(h = 0.9) + abline(h = 0.99)
+```
+
+An important question in building predictive text model is how many words do I need for the dictionary of words so that it covers the words appear in the text data. To answer this question, a plot of cumulative frequency of the words ordered from most to least frequent is shown. And it turns out that to cover 50% of the words, `r Coverage50` words are need; for 90% coverage, `r Coverage90` words are needed; for 99% coverage, `r Coverage99` words are needed.
+```{r histogram unigram, message = FALSE, eval = TRUE, cache = TRUE, fig.width = 10}
+plotNGram <- function(thisDF, nTerms, title)
+{
+  DFforPlot <- thisDF[1:nTerms,]
+  DFforPlot$words <- reorder(DFforPlot$words, DFforPlot$freq)
+  p <- ggplot(DFforPlot, aes(x = words, y = percentage)) +
+    geom_bar(stat = "identity") +
+    ggtitle(title) +
+    coord_flip() +
+    theme(legend.position = "none")
+  return(p)
+}
+p1 <- plotNGram(newsUniGramDF, 10, "News Top10 Unigram")
+p2 <- plotNGram(blogsUniGramDF, 10, "Blogs Top10 Unigram")
+p3 <- plotNGram(twitterUniGramDF, 10, "Twitter Top10 Unigram")
+
+grid.arrange(p1, p2, p3, ncol = 3)
+```
+
+### Bigram and Trigram Frequencies
+Frequencies of word pairs, also called bigrams, and trigrams (three-word-groups) are also analyzed. The tokenize_ngrams function from tokenizers function is used. Most frequent bigrams and trigrams from three files are plotted.
+```{r bigram, message = FALSE, eval = TRUE, cache = TRUE, fig.width = 10}
+library(tokenizers)
+generate_nGrams <- function(thisDF, nValue){
+    thisDF <- unlist(thisDF)
+    nGramsList <- vector(mode = "character")
+    for (i in 1:length(thisDF)) {
+        this_nGramsList <- tokenize_ngrams(
+            thisDF[i], n = nValue, simplify = FALSE)
+        nGramsList <- c(nGramsList, this_nGramsList[[1]])
+    }
+    return(nGramsList)
+}
+generate_nGramsDF <- function(thisCorpus, nValue){
+    thisDF <- data.frame(text = sapply(thisCorpus, as.character), stringsAsFactors = FALSE)
+    thisNGrams <- unname(unlist(sapply(thisDF, generate_nGrams, nValue)))
+    thisGramsDF <- data.frame(table(thisNGrams))
+    thisGramsDF$percentage <- (thisGramsDF$Freq/sum(thisGramsDF$Freq))
+    thisGramsDF <- thisGramsDF[order(-thisGramsDF$Freq),]
+    colnames(thisGramsDF) <- c("words","freq","percentage")
+    return(thisGramsDF)
+}
+newsBiGramsDF <- generate_nGramsDF(newsCorpus, 2)
+blogsBiGramsDF <- generate_nGramsDF(blogsCorpus, 2)
+twitterBiGramsDF <- generate_nGramsDF(twitterCorpus, 2)
+p4 <- plotNGram(newsBiGramsDF, 10, "News Top10 Bigram")
+p5 <- plotNGram(blogsBiGramsDF, 10, "Blogs Top10 Bigram")
+p6 <- plotNGram(twitterBiGramsDF, 10, "Twitter Top10 Bigram")
+grid.arrange(p4, p5, p6, ncol = 3)
+newsTriGramsDF <- generate_nGramsDF(newsCorpus, 3)
+blogsTriGramsDF <- generate_nGramsDF(blogsCorpus, 3)
+twitterTriGramsDF <- generate_nGramsDF(twitterCorpus, 3)
+p7 <- plotNGram(newsTriGramsDF, 10, "News Top10 Trigram")
+p8 <- plotNGram(blogsTriGramsDF, 10, "Blogs Top10 Trigram")
+p9 <- plotNGram(twitterTriGramsDF, 10, "Twitter Top10 Trigram")
+grid.arrange(p7, p8, p9, ncol = 3)
+```
+
+## Plan for Building Predictive Text Model
+After initial cleaning of the data, preliminary analysis like n-grams frequencies (n = 1, 2, 3) is done for three input files. My plan next is to:
+
+* implement a function to detect foreign text
+* build a predictive text model to predict the next word based on previous 3-gram, 2-gram or 1-gram
+* efficiently store the model so that prediction takes as little time as possible
+* implement backoff models to estimate the probability of unobserved n-grams
+* create a shiny app to apply the predictive model to interactive use
