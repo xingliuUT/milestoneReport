@@ -10,5 +10,20 @@ Text data used in this project includes English texts from news, blogs and twitt
 ## Report
 The report is available [here](http://rpubs.com/xl3676/276955).
 
+## Method
+
+### Tokenize
+Chunks of text are split into sentences.
+
+### Remove Profanity Words
+
+### Cleaning
+Remove numbers, remove punctuation, strip white spaces, convert to all lower cases letters.
+
+### 1-gram, 2-gram, 3-gram frequencies
+Term-document matrix is used to find word (1-gram) frequencies.
+
+Generate 2-gram and 3-gram with `tokenize_ngrams` function from `tokenizers` package.
+
 ## Source code
 The source code is in the file `report.Rmd`.
