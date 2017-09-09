@@ -86,7 +86,7 @@ blogsData <- unname(unlist(sapply(textData$blogs, sent_detect)))
 twitterData <- unname(unlist(sapply(textData$twitter, sent_detect)))
 ```
 #### Remove Profanity Words
-A list of profanity words is used to remove sentences containing any one of the words from our data set. I found the list from https://gist.github.com/tjrobinson/2366772. After profanity words are removed, create Corpus objects defined by tm package which will be used in manipulations of the text in the following procedures.
+A list of profanity words is used to remove sentences containing any one of the words from our data set. I found the list from [here](https://gist.github.com/tjrobinson/2366772). After profanity words are removed, create Corpus objects defined by tm package which will be used in manipulations of the text in the following procedures.
 ```{r remove profanity words, eval = TRUE, cache = TRUE}
 profanityWordsDF <- read.csv(
         "../../milestone/profanity.csv",sep="\n")
@@ -222,6 +222,6 @@ After initial cleaning of the data, preliminary analysis like n-grams frequencie
 * implement backoff models to estimate the probability of unobserved n-grams
 * create a shiny app to apply the predictive model to interactive use
 
-##Source Code
+## Source Code
 Rmarkdown file for this report can be found at: https://github.com/xingliuUT/milestoneReport
 
