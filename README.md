@@ -8,7 +8,7 @@ This project uses the natural language processing and text mining tools used in 
 Text data used in this project includes English texts from news, blogs and twitter which are offered by the company [SwiftKey](https://swiftkey.com/en) in the format of HC Corpora. Plans of how to build the text model will also be discussed.
 
 ## Report
-The report is available [on line](http://rpubs.com/xl3676/276955).
+The report is available on [Rpubs](http://rpubs.com/xl3676/276955).
 
 ## Method
 
