@@ -11,7 +11,7 @@ Text data used in this project includes English texts from news, blogs and twitt
 The report is available on [Rpubs](http://rpubs.com/xl3676/276955).
 
 ## Method
-
+Natural language processing packages in R used in this project include: `tm`, `qdaq`, and `tokenizers`.
 ### Cleaning
 Remove profanity words, numbers, remove punctuation, strip white spaces, convert to all lower cases letters.
 
